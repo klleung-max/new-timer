@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>無障礙計時器 (Accessibility Timer)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* Base clean styles */
+        body {
+            background-color: #f8fafc;
+            touch-action: manipulation;
+        }
+
+        /* Dynamic Button Sizing */
+        .btn-sm { width: 200px; height: 200px; }
+        .btn-md { width: 350px; height: 350px; }
+        .btn-lg { width: 500px; height: 500px; }
+        
+        .text-sm-size { font-size: 2rem; }
+        .text-md-size { font-size: 3.5rem; }
+        .text-lg-size { font-size: 5rem; }
+
+        /* Main button styling */
+        .timer-btn {
+            background-color: #ef4444;
+            border: 8px solid #dc2626;
+            box-shadow: 0 10px 25px rgba(220, 38, 38, 0.4);
+            transition: transform 0.1s ease-in-out, background-color 0.2s;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .timer-btn:active {
+            transform: scale(0.95);
+        }
+
+        .timer-btn.running {
+            background-color: #f87171;
+            border-color: #ef4444;
+        }
+
+        /* Dwell Progress Indicator */
+        #dwellIndicator {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            transform: scale(0);
+            transform-origin: center;
+            z-index: 1;
+        }
+
+        .btn-content {
+            position: relative;
+            z-index: 10;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .settings-btn {
+            opacity: 0.1;
+            transition: opacity 0.3s;
+        }
+        .settings-btn:hover, .settings-btn:focus {
+            opacity: 0.8;
+            outline: none;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center overflow-hidden font-sans">
+
+    <!-- Settings Button -->
+    <button id="openSettings" class="settings-btn absolute top-6 right-6 text-gray-500 hover:text-gray-800 p-2 text-2xl z-20" aria-label="設定 (Settings)">
+        <i class="fa-solid fa-gear"></i>
+    </button>
+
+    <!-- Main UI -->
+    <main class="flex flex-col items-center justify-center h-full w-full">
+        <button id="mainBtn" class="timer-btn btn-md" aria-label="開始或停止計時 (Start or Stop Timer)">
+            <div id="dwellIndicator"></div>
+            <div class="btn-content flex flex-col items-center">
+                <div id="statusText" class="text-xl mb-2 opacity-90 tracking-widest">準備 (READY)</div>
+                <div id="timeDisplay" class="text-md-size font-mono tabular-nums leading-none">00:00</div>
+            </div>
+        </button>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800 text-center border-b pb-4">計時器設定 (Settings)</h2>
+            
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3">操作模式 (Operation Mode)</h3>
+                <div class="flex gap-4">
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="opMode" value="eye" class="peer sr-only" checked>
+                        <div class="text-center p-3 rounded-xl border-2 border-gray-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition">眼動儀<br><span class="text-sm">(Eye Tracker)</span></div>
+                    </label>
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="opMode" value="touch" class="peer sr-only">
+                        <div class="text-center p-3 rounded-xl border-2 border-gray-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition">拍制/觸屏<br><span class="text-sm">(Switch/Touch)</span></div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3">大紅按鈕大小 (Button Size)</h3>
+                <div class="flex gap-4">
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="btnSize" value="sm" class="peer sr-only">
+                        <div class="text-center p-3 rounded-xl border-2 border-gray-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition">小 (Small)</div>
+                    </label>
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="btnSize" value="md" class="peer sr-only" checked>
+                        <div class="text-center p-3 rounded-xl border-2 border-gray-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition">中 (Medium)</div>
+                    </label>
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="btnSize" value="lg" class="peer sr-only">
+                        <div class="text-center p-3 rounded-xl border-2 border-gray-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:bg-gray-50 transition">大 (Large)</div>
+                    </label>
+                </div>
+            </div>
+
+            <div id="dwellTimeSection" class="mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3">眼動儀注視觸發時長 (Dwell Time)</h3>
+                <div class="flex items-center gap-4">
+                    <input type="range" id="dwellTimeSlider" min="0.1" max="1" step="0.1" value="0.5" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    <span id="dwellTimeDisplay" class="text-xl font-bold text-gray-700 w-24 text-right">0.5 秒</span>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3">背景音樂 (Background Music)</h3>
+                <input type="file" id="audioUpload" accept="audio/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition cursor-pointer">
+                <p class="text-xs text-gray-500 mt-2">已預設載入《不可能的任務》主題曲。您也可以自行上傳本機音檔替換。</p>
+            </div>
+
+            <button id="closeSettings" class="w-full py-4 bg-gray-800 text-white rounded-xl font-bold text-lg hover:bg-gray-700 transition shadow-lg active:scale-95">
+                完成 (Done)
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden Audio Element for Background Music with Default Source -->
+   <audio id="bgMusic" loop src="music.mp3"></audio>
+    <script>
+        let isRunning = false;
+        let startTime = 0;
+        let elapsedTime = 0;
+        let displayTimerId = null;
+
+        let dwellDuration = 500; 
+        let currentSize = 'md';
+        let operationMode = 'eye'; 
+
+        let dwellTimerId = null;
+        let hasLeftSinceLastAction = true; 
+
+        const mainBtn = document.getElementById('mainBtn');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const statusText = document.getElementById('statusText');
+        const dwellIndicator = document.getElementById('dwellIndicator');
+        const settingsModal = document.getElementById('settingsModal');
+        const openSettingsBtn = document.getElementById('openSettings');
+        const closeSettingsBtn = document.getElementById('closeSettings');
+        const dwellTimeSlider = document.getElementById('dwellTimeSlider');
+        const dwellTimeDisplay = document.getElementById('dwellTimeDisplay');
+        const opModeRadios = document.querySelectorAll('input[name="opMode"]');
+        const dwellTimeSection = document.getElementById('dwellTimeSection');
+        
+        const audioUpload = document.getElementById('audioUpload');
+        const bgMusic = document.getElementById('bgMusic');
+
+        // Handle Audio Upload overriding default
+        audioUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const objectURL = URL.createObjectURL(file);
+                bgMusic.src = objectURL;
+            }
+        });
+
+        opModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'touch') {
+                    dwellTimeSection.style.display = 'none';
+                } else {
+                    dwellTimeSection.style.display = 'block';
+                }
+            });
+        });
+
+        dwellTimeSlider.addEventListener('input', (e) => {
+            dwellTimeDisplay.innerText = `${e.target.value} 秒`;
+        });
+
+        function formatTime(totalMs) {
+            let totalSeconds = Math.floor(totalMs / 1000);
+            let h = Math.floor(totalSeconds / 3600);
+            let m = Math.floor((totalSeconds % 3600) / 60);
+            let s = totalSeconds % 60;
+
+            let formatted = '';
+            if (h > 0) {
+                formatted += String(h).padStart(2, '0') + ':';
+            }
+            formatted += String(m).padStart(2, '0') + ':';
+            formatted += String(s).padStart(2, '0');
+            
+            return formatted;
+        }
+
+        function updateDisplay() {
+            let currentTotal = isRunning ? Date.now() - startTime : elapsedTime;
+            timeDisplay.innerText = formatTime(currentTotal);
+        }
+
+        function toggleTimer() {
+            cancelDwell();
+            hasLeftSinceLastAction = false; 
+
+            if (isRunning) {
+                elapsedTime = Date.now() - startTime;
+                isRunning = false;
+                clearInterval(displayTimerId);
+                
+                mainBtn.classList.remove('running');
+                statusText.innerText = "完成 (STOPPED)";
+                updateDisplay();
+                
+                bgMusic.pause();
+                speakCantonese(elapsedTime);
+                
+            } else {
+                speechSynthesis.cancel(); 
+                elapsedTime = 0;
+                startTime = Date.now();
+                isRunning = true;
+                
+                mainBtn.classList.add('running');
+                statusText.innerText = "計時中... (RUNNING)";
+                
+                if (bgMusic.src) {
+                    bgMusic.currentTime = 0; 
+                    bgMusic.play().catch(e => console.log("Audio play failed:", e));
+                }
+
+                updateDisplay();
+                displayTimerId = setInterval(updateDisplay, 50); 
+            }
+        }
+
+        function speakCantonese(totalMs) {
+            let totalSeconds = Math.floor(totalMs / 1000);
+            let h = Math.floor(totalSeconds / 3600);
+            let m = Math.floor((totalSeconds % 3600) / 60);
+            let s = totalSeconds % 60;
+
+            let text = '一共用咗';
+            if (h > 0) text += `${h}個鐘`;
+            if (m > 0) text += `${m}分鐘`;
+            if (s > 0 || (h === 0 && m === 0)) text += `${s}秒`; 
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK';
+            utterance.rate = 0.9; 
+            speechSynthesis.speak(utterance);
+        }
+
+        function startDwell() {
+            if (operationMode !== 'eye') return;
+            if (!hasLeftSinceLastAction) return;
+
+            dwellIndicator.style.transition = `transform ${dwellDuration}ms linear`;
+            dwellIndicator.style.transform = 'scale(1)';
+
+            dwellTimerId = setTimeout(() => {
+                toggleTimer();
+            }, dwellDuration);
+        }
+
+        function cancelDwell() {
+            clearTimeout(dwellTimerId);
+            dwellTimerId = null;
+            dwellIndicator.style.transition = 'none';
+            dwellIndicator.style.transform = 'scale(0)';
+        }
+
+        mainBtn.addEventListener('mouseenter', startDwell);
+        
+        mainBtn.addEventListener('mouseleave', () => {
+            hasLeftSinceLastAction = true; 
+            cancelDwell();
+        });
+
+        mainBtn.addEventListener('click', (e) => {
+            if (operationMode === 'touch') {
+                toggleTimer();
+            } else {
+                if(hasLeftSinceLastAction) {
+                    toggleTimer();
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Space' || e.code === 'Enter') && settingsModal.classList.contains('hidden')) {
+                e.preventDefault(); 
+                hasLeftSinceLastAction = true; 
+                toggleTimer();
+                
+                mainBtn.style.transform = 'scale(0.95)';
+                setTimeout(() => mainBtn.style.transform = '', 150);
+            }
+        });
+
+        function applySettings() {
+            const selectedSize = document.querySelector('input[name="btnSize"]:checked').value;
+            mainBtn.classList.remove(`btn-${currentSize}`);
+            timeDisplay.classList.remove(`text-${currentSize}-size`);
+            
+            currentSize = selectedSize;
+            
+            mainBtn.classList.add(`btn-${currentSize}`);
+            timeDisplay.classList.add(`text-${currentSize}-size`);
+
+            operationMode = document.querySelector('input[name="opMode"]:checked').value;
+            dwellDuration = parseFloat(dwellTimeSlider.value) * 1000;
+        }
+
+        openSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('hidden');
+            cancelDwell(); 
+        });
+
+        closeSettingsBtn.addEventListener('click', () => {
+            applySettings();
+            settingsModal.classList.add('hidden');
+            hasLeftSinceLastAction = true; 
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape' && !settingsModal.classList.contains('hidden')) {
+                applySettings();
+                settingsModal.classList.add('hidden');
+                hasLeftSinceLastAction = true;
+            }
+        });
+    </script>
+</body>
+</html>
